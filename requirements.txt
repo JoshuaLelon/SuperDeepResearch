@@ -1,0 +1,14 @@
+# If not using poetry, install your Python dependencies here
+# e.g.:
+# pip install mcp-python-sdk 
+
+langchain==0.0.1
+langgraph==0.0.1
+browser-use==0.0.1
+requests==2.31.0
+google-auth==2.21.0
+google-auth-oauthlib==1.0.0
+google-auth-httplib2==0.1.0
+httpx==0.24.1
+fastapi==0.103.2
+uvicorn==0.23.2 
