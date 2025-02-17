@@ -53,16 +53,20 @@ async def gemini_deep_research(plan: str) -> str:
     # Initialize browser with config
     browser = Browser(config=browser_config)
     
-    # Create agent with browser
+    # Create agent with browser and limit response size
     agent = Agent(
         task=plan,
         llm=llm,
-        browser=browser
+        browser=browser,
+        generate_gif=False,  # Disable GIF generation to avoid filesystem issues
+        max_input_tokens=32000,  # Reduce token limit to keep responses smaller
+        max_actions_per_step=3  # Limit actions per step to reduce response size
     )
     
     try:
-        result = await agent.run()
-        return result
+        # Run with fewer steps to limit total response size
+        result = await agent.run(max_steps=5)
+        return result.final_result() or "No results found"
     finally:
         await browser.close()  # Ensure browser is closed after use
 
