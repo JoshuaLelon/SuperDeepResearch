@@ -10,8 +10,15 @@ This directory contains Python files that implement the core functionality of th
 - **`orchestrator.py`**  
   Orchestrates multi-product research. Takes a plan from `plan_tool.py` and calls `single_research.py` for each step.
 
-- **`single_research.py`**  
-  Uses headless browser logic to interact with a single product’s website or API.
+- **`single_research.py`** now directly uses the **`browser-use`** library for headless browsing (inspired by relishplus, but without depending on it). Steps:
+    1. Launch a headless browser session.  
+    2. Navigate to a product URL.  
+    3. Input search terms and submit.  
+    4. Extract relevant text from the page.
+
+**Note**: Update your `requirements.txt` or `pyproject.toml` to include `"browser-use"` if not already present.
+
+  **Important**: Update `requirements.txt` or `pyproject.toml` to include the `browser-use` and `relishplus` packages if they are not already present.
 
 - **`combine_tool.py`**  
   Combines multiple partial results into a single comprehensive report and gathers references/sources.

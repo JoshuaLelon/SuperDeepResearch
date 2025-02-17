@@ -1,2 +1,4 @@
 python-sdk/
 relishplus/
+
+.env

@@ -13,10 +13,10 @@ This directory contains the MCP server logic: a FastAPI-based server that coordi
   - Optionally loads routes for each tool.
 
 - **`tools/`**  
-  A subdirectory of “tools” modules that implement each major function:
+  A subdirectory of "tools" modules that implement each major function:
   - Plan generation (`plan_tool.py`)
   - Multi-product orchestration (`orchestrator.py`)
-  - Single-product research via headless browser (`single_research.py`)
+  - **`single_research.py`** which now leverages the `browser-use` API (based on the relishplus project) to run headless browser sessions for each product site.
   - Combination of partial results (`combine_tool.py`)
   - Upload sources to Google Drive (`upload_tool.py`)
   - Complete E2E pipeline (`e2e_tool.py`)
@@ -35,7 +35,7 @@ This directory contains the MCP server logic: a FastAPI-based server that coordi
 
 ## Endpoints
 
-(Currently, endpoints are placeholders, but generally you’d define routes in `server.py` or a dedicated router module within `tools/`.)
+(Currently, endpoints are placeholders, but generally you'd define routes in `server.py` or a dedicated router module within `tools/`.)
 
 For details on each tool, see [tools/README.md](tools/README.md).
 
@@ -43,3 +43,8 @@ For details on each tool, see [tools/README.md](tools/README.md).
 
 - When adding new tools or changing the server structure, update this file.  
 - Also update the root `README.md` to reflect high-level changes across the project.
+
+
+## Example Usage
+
+With the MCP Python SDK integrated, you can connect a local MCP client (like Claude Desktop or your own MCP client) to use the provided tools in `tools/`. For details on each tool, see [tools/README.md](tools/README.md).
