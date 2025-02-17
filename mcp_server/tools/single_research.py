@@ -15,7 +15,7 @@ logging.getLogger().addHandler(logging.NullHandler())
 # Now import other modules
 from typing import Any, List
 from langchain_openai import ChatOpenAI
-from browser_use import Agent
+from browser_use import Agent, BrowserConfig
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -33,9 +33,17 @@ async def gemini_deep_research(plan: str) -> str:
     Returns text or structured data after navigating and extracting page results.
     """
     llm = ChatOpenAI(model="gpt-4o")
+    config = BrowserConfig(
+        headless=True,
+        disable_security=True
+    )
+    browser = Browser(config=config)
     agent = Agent(
         task=plan,
-        llm=llm
+        llm=llm,
+        browser=browser
     )
     result = await agent.run()
     return result
+
+# Basic configuration
