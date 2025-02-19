@@ -4,9 +4,9 @@ import asyncio
 from typing import Optional, Any
 from patchright.async_api import async_playwright, Browser, Page
 
-from .base import BaseResearchScraper
-from .auth import GeminiAuth
-from .config import ScraperConfig, ResearchSite
+from ...core.base import BaseResearchScraper
+from ...core.auth import GeminiAuth
+from ...core.config import ScraperConfig, ResearchSite
 
 logger = logging.getLogger(__name__)
 

@@ -6,21 +6,16 @@ This directory contains various tools and utilities used by the MCP server.
 
 ```
 tools/
-├── gemini_scrapers_base/     # Base utilities for research site scraping
-│   ├── __init__.py          # Exports shared components
-│   ├── auth.py              # Authentication handling
-│   ├── base.py              # Base scraper class
-│   ├── config.py            # Shared configuration
-│   ├── browser_use_impl.py  # Browser-use implementation
-│   ├── nodriver_impl.py     # NoDriver implementation
-│   ├── patchright_impl.py   # Patchright implementation
-│   └── perplexity_impl.py   # Perplexity implementation
-└── single_research.py       # Main entry point for research
+├── research_scrapers/     # Browser automation and research
+│   ├── core/             # Shared abstractions and utilities
+│   ├── drivers/          # Browser automation implementations (HOW)
+│   └── sites/            # Site-specific implementations (WHAT)
+└── research_engine.py    # Main entry point for research
 ```
 
 ## Research Tools
 
-The research functionality is centralized in `single_research.py`, which provides support for multiple research sites and browser automation approaches:
+The research functionality is centralized in `research_engine.py`, which provides support for multiple research sites and browser automation approaches. See [research_scrapers/README.md](research_scrapers/README.md) for detailed architecture documentation.
 
 ### Research Sites
 

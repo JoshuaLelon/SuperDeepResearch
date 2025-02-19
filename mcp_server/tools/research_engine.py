@@ -11,11 +11,16 @@ from typing import Any, Dict, Optional
 from enum import Enum
 from dataclasses import dataclass
 
-# Completely disable all logging before importing anything else
-logging.getLogger().setLevel(logging.CRITICAL)
-for handler in logging.getLogger().handlers[:]:
-    logging.getLogger().removeHandler(handler)
-logging.getLogger().addHandler(logging.NullHandler())
+# Set up logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Create console handler with formatting
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 # Now import other modules
 from langchain_openai import ChatOpenAI
@@ -84,13 +89,16 @@ async def browse_with_nodriver(query: str, config: ResearchConfig) -> str:
 
 async def browse_with_patchright(query: str, config: ResearchConfig) -> str:
     """Execute research using Patchright automation"""
+    logger.info(f"Starting Patchright research for site: {config.site}")
     if config.site == ResearchSite.PERPLEXITY:
+        logger.info("Initializing Perplexity scraper...")
         scraper = PerplexityScraper(ScraperConfig(
             headless=config.headless,
             window_size=(config.window_width, config.window_height),
             site=config.site
         ))
     else:
+        logger.info("Initializing Gemini scraper...")
         scraper = GeminiScraper(ScraperConfig(
             headless=config.headless,
             window_size=(config.window_width, config.window_height),
@@ -98,12 +106,25 @@ async def browse_with_patchright(query: str, config: ResearchConfig) -> str:
         ))
     
     try:
+        logger.info("Setting up browser...")
         await scraper.setup()
+        logger.info("Browser setup complete")
+        
+        logger.info("Attempting login...")
         await scraper.login()
+        logger.info("Login complete")
+        
+        logger.info("Executing research query...")
         result = await scraper.execute_research(query)
+        logger.info("Research complete")
         return result
+    except Exception as e:
+        logger.error(f"Research failed: {str(e)}")
+        raise
     finally:
+        logger.info("Cleaning up browser resources...")
         await scraper.cleanup()
+        logger.info("Cleanup complete")
 
 async def deep_research(
     plan: str,
@@ -139,11 +160,18 @@ async def deep_research(
     
     for attempt in range(config.max_retries):
         try:
+            if attempt > 0:
+                logger.info(f"Retry attempt {attempt + 1}/{config.max_retries}")
+                # Add increasing delay between retries
+                delay = attempt * 2
+                logger.info(f"Waiting {delay} seconds before retry...")
+                await asyncio.sleep(delay)
             return await research_func(plan, config)
         except Exception as e:
+            logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
             if attempt == config.max_retries - 1:
+                logger.error("Max retries reached, giving up.")
                 raise
-            logging.warning(f"Attempt {attempt + 1} failed: {str(e)}. Retrying...")
-            await asyncio.sleep(1)  # Brief pause before retry
+            logger.warning(f"Will retry in {(attempt + 1) * 2} seconds...")
 
 # Basic configuration

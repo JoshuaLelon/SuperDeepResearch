@@ -53,9 +53,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--headless",
-        type=bool,
-        default=True,
-        help="Run in headless mode (default: True)"
+        action='store_false',
+        help="Run in non-headless mode (default: True)"
     )
     
     args = parser.parse_args()

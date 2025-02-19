@@ -1,12 +1,12 @@
-"""Browser-Use based implementation for Gemini scraping."""
+"""Browser-Use based implementation for research scraping."""
 import logging
 from typing import Optional, Any
 from browser_use import Agent, BrowserConfig, Browser, BrowserContextConfig
 from langchain_openai import ChatOpenAI
 
-from .base import BaseScraper
-from .auth import GeminiAuth
-from .config import ScraperConfig
+from ..core.base import BaseResearchScraper
+from ..core.auth import GeminiAuth
+from ..core.config import ScraperConfig, ResearchSite
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +37,11 @@ class BrowserUseAuth(GeminiAuth):
         """Verification handled by Browser-Use agent"""
         return True
 
-class BrowserUseScraper(BaseScraper):
+class BrowserUseScraper(BaseResearchScraper):
     """Browser-Use implementation of Gemini scraper"""
     
     def __init__(self, config: Optional[ScraperConfig] = None):
         super().__init__(config)
-        self.gemini_url = "https://gemini.google.com/app"
         self.browser = None
         self.agent = None
         self.llm = ChatOpenAI(model="gpt-4", temperature=0.0)
@@ -50,7 +49,7 @@ class BrowserUseScraper(BaseScraper):
     @property
     def auth(self) -> GeminiAuth:
         """Get Browser-Use specific auth handler"""
-        if not self._auth:
+        if not self._auth and self.config.site == ResearchSite.GEMINI:
             if not self.agent:
                 raise RuntimeError("Browser agent not initialized")
             self._auth = BrowserUseAuth(self.config, self.agent)
@@ -86,29 +85,63 @@ class BrowserUseScraper(BaseScraper):
             self.agent = None
             logger.info("Browser stopped successfully")
 
+    async def handle_site_specific_research(self, site: ResearchSite, query: str) -> str:
+        """Handle research for specific sites"""
+        if site == ResearchSite.PERPLEXITY:
+            try:
+                # Create agent with research task
+                task = (
+                    f"Go to {self.config.site_config.url}\n"
+                    f"Click the 'Deep Research' button\n"
+                    f"Wait for the input field to appear\n"
+                    f"Enter this research query: {query}\n"
+                    f"Press Enter and wait for the complete response\n"
+                    f"Extract the response content"
+                )
+                
+                self.agent = Agent(
+                    task=task,
+                    llm=self.llm,
+                    browser=self.browser,
+                    generate_gif=False,
+                    max_input_tokens=32000,
+                    max_actions_per_step=3
+                )
+                
+                result = await self.agent.run(max_steps=5)
+                return result.final_result() or "No results found"
+                
+            except Exception as e:
+                logger.error(f"Query submission error: {str(e)}")
+                raise
+        elif site == ResearchSite.GEMINI:
+            try:
+                # Create agent with research task
+                task = (
+                    f"Go to {self.config.site_config.url}\n"
+                    f"Log in with email '{self.config.google_email}' and password '{self.config.google_password}'\n"
+                    f"Enter this research query: {query}\n"
+                    f"Wait for and extract the complete response"
+                )
+                
+                self.agent = Agent(
+                    task=task,
+                    llm=self.llm,
+                    browser=self.browser,
+                    generate_gif=False,
+                    max_input_tokens=32000,
+                    max_actions_per_step=3
+                )
+                
+                result = await self.agent.run(max_steps=5)
+                return result.final_result() or "No results found"
+                
+            except Exception as e:
+                logger.error(f"Query submission error: {str(e)}")
+                raise
+        else:
+            raise ValueError(f"Unsupported research site: {site}")
+
     async def execute_research(self, query: str) -> str:
         """Execute research using Browser-Use"""
-        try:
-            # Create agent with research task
-            task = (
-                f"Go to {self.gemini_url}\n"
-                f"Log in with email '{self.config.google_email}' and password '{self.config.google_password}'\n"
-                f"Enter this research query: {query}\n"
-                f"Wait for and extract the complete response"
-            )
-            
-            self.agent = Agent(
-                task=task,
-                llm=self.llm,
-                browser=self.browser,
-                generate_gif=False,
-                max_input_tokens=32000,
-                max_actions_per_step=3
-            )
-            
-            result = await self.agent.run(max_steps=5)
-            return result.final_result() or "No results found"
-            
-        except Exception as e:
-            logger.error(f"Query submission error: {str(e)}")
-            raise 
+        return await self.handle_site_specific_research(self.config.site, query) 

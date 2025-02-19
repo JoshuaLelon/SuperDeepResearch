@@ -19,6 +19,11 @@ def setup_logging(name: str) -> logging.Logger:
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
 
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)  # Set console to INFO level
+
     # Get logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
@@ -29,7 +34,8 @@ def setup_logging(name: str) -> logging.Logger:
     # Remove any existing handlers to avoid duplicates
     logger.handlers = []
     
-    # Add only file handler
+    # Add handlers
     logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
 
     return logger 

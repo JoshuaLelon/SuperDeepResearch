@@ -2,11 +2,11 @@
 import logging
 import asyncio
 from typing import Optional, Any
-from patchright.async_api import async_playwright, Browser, Page
+from patchright.async_api import async_playwright, Browser, Page, BrowserContext
 
-from .base import BaseResearchScraper
-from .auth import GeminiAuth
-from .config import ScraperConfig, ResearchSite
+from ..core.base import BaseResearchScraper
+from ..core.auth import GeminiAuth
+from ..core.config import ScraperConfig, ResearchSite
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,24 @@ class PatchrightAuth(GeminiAuth):
     async def navigate_to_login(self) -> None:
         """Navigate to Google login page"""
         await asyncio.sleep(2)
-        sign_in_button = await self.page.get_by_text("Sign in", exact=True).click()
-        await asyncio.sleep(2)
+        try:
+            # Try the action button first
+            sign_in_button = await self.page.locator('[data-test-id="action-button"]').click()
+        except Exception:
+            try:
+                # Try the link version
+                sign_in_button = await self.page.get_by_role("link", name="Sign in").click()
+            except Exception:
+                # We might already be on the login page
+                pass
+        
+        # Wait for the login page to load
+        await asyncio.sleep(5)
+        
+        # Check if we're already on the login page
+        current_url = self.page.url
+        if not current_url.startswith("https://accounts.google.com"):
+            raise RuntimeError("Failed to reach Google login page")
 
     async def enter_email(self) -> None:
         """Enter email and proceed"""
