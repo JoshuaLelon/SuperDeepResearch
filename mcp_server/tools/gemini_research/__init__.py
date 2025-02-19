@@ -1,7 +1,8 @@
 """
-Gemini research automation package
+Gemini research automation module
 """
+from .config import Config, load_config
 from .automation import GeminiAutomation
-from .config import Config, ResearchPreferences, load_config
+from .nodriver_automation import GeminiNoDriverAutomation
 
-__all__ = ['GeminiAutomation', 'Config', 'ResearchPreferences', 'load_config'] 
+__all__ = ['Config', 'load_config', 'GeminiAutomation', 'GeminiNoDriverAutomation'] 

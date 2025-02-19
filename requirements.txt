@@ -6,3 +6,6 @@ langsmith==0.2.0
 browser-use==0.1.37
 playwright==1.50.0
 httpx==0.28.1
+undetected-chromedriver==3.4.6
+nodriver==0.38.post1
+websockets==13.1
