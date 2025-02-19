@@ -1,28 +1,82 @@
-# Scripts
+# Test Scripts
 
-This folder contains various shell scripts for the Deep Research MCP project.
+This directory contains test scripts for different browser automation approaches used in research.
 
-## Contents
+## Available Scripts
 
-- **`local_test.sh`**  
-  Creates/activates a virtual environment, installs dependencies, and runs tests with coverage.  
-  Example usage:
-  ```
-  ./scripts/local_test.sh
-  ```
+- `test_browser_use.py`: Test Browser-use-based research
+- `test_nodriver.py`: Test NoDriver-based research
+- `test_patchright.py`: Test Patchright-based research
 
-- **`deploy.sh`**  
-  Builds and pushes a Docker image to your specified container registry (e.g., Google Container Registry), then optionally applies a Kubernetes deployment or another orchestrator step.  
-  Example usage:
-  ```
-  ./scripts/deploy.sh
-  ```
+## Usage
 
-## Adding New Scripts
+All test scripts support the same command-line arguments:
 
-1. Create the shell script in this folder (e.g., `myscript.sh`).  
-2. Update this `README.md` with a brief description of the script’s purpose and usage.
+```bash
+python -m scripts.test_patchright --query "your query" --site perplexity --headless true
+```
 
-## Related Docs
+### Arguments
 
-- [../README.md](../README.md) for the overall project overview.
+- `--query` (required): The research query to execute
+- `--site` (optional): Research site to use (default: gemini)
+  - Available sites: gemini, perplexity
+- `--headless` (optional): Whether to run in headless mode (default: true)
+
+### Examples
+
+1. Using Patchright with Perplexity:
+```bash
+python -m scripts.test_patchright \
+  --query "Compare GPT-4 vs Gemini in summarizing climate change data" \
+  --site perplexity \
+  --headless true
+```
+
+2. Using NoDriver with Gemini:
+```bash
+python -m scripts.test_nodriver \
+  --query "Analyze recent Gemini updates" \
+  --site gemini \
+  --headless false
+```
+
+3. Using Browser-use with Perplexity:
+```bash
+python -m scripts.test_browser_use \
+  --query "Research quantum computing advancements" \
+  --site perplexity \
+  --headless true
+```
+
+## Environment Variables
+
+Required for Gemini research:
+- `GOOGLE_EMAIL`: Google account email
+- `GOOGLE_PASSWORD`: Google account password
+- `GOOGLE_2FA_SECRET` (optional): If 2FA is enabled
+
+No authentication required for Perplexity research.
+
+## Output
+
+Each script will output:
+1. Progress messages during execution
+2. Research results formatted with separators
+3. Any errors that occur during execution
+
+## Error Handling
+
+Scripts will:
+1. Validate the site selection
+2. Check for required environment variables (for Gemini)
+3. Handle browser automation errors
+4. Clean up resources on completion or error
+
+## Adding New Sites
+
+When adding support for new research sites:
+1. Add the site to `ResearchSite` enum in `config.py`
+2. Add site configuration to `SITE_CONFIGS`
+3. Implement the site-specific scraper
+4. Test using these scripts with the new site option 

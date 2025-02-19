@@ -1,70 +1,149 @@
 # MCP Server Tools
 
-This directory contains Python files that implement the core functionality of the MCP server.
+This directory contains various tools and utilities used by the MCP server.
 
-## Contents
+## Directory Structure
 
-- **`plan_tool.py`**  
-  Generates a plan from a user query (e.g., which products to query, how to parse them, etc.).
+```
+tools/
+├── gemini_scrapers_base/     # Base utilities for research site scraping
+│   ├── __init__.py          # Exports shared components
+│   ├── auth.py              # Authentication handling
+│   ├── base.py              # Base scraper class
+│   ├── config.py            # Shared configuration
+│   ├── browser_use_impl.py  # Browser-use implementation
+│   ├── nodriver_impl.py     # NoDriver implementation
+│   ├── patchright_impl.py   # Patchright implementation
+│   └── perplexity_impl.py   # Perplexity implementation
+└── single_research.py       # Main entry point for research
+```
 
-- **`orchestrator.py`**  
-  Orchestrates multi-product research. Takes a plan from `plan_tool.py` and calls `single_research.py` for each step.
+## Research Tools
 
-- **`single_research.py`** now directly uses the **`browser-use`** library for headless browsing (inspired by relishplus, but without depending on it). Steps:
-    1. Launch a headless browser session.  
-    2. Navigate to a product URL.  
-    3. Input search terms and submit.  
-    4. Extract relevant text from the page.
+The research functionality is centralized in `single_research.py`, which provides support for multiple research sites and browser automation approaches:
 
-**Note**: Update your `requirements.txt` or `pyproject.toml` to include `"browser-use"` if not already present.
+### Research Sites
 
-  **Important**: Update `requirements.txt` or `pyproject.toml` to include the `browser-use` and `relishplus` packages if they are not already present.
+1. **Gemini**: Google's Gemini AI research interface
+   - Requires Google account authentication
+   - Supports 2FA
+   - Full chat history and context
 
-- **`combine_tool.py`**  
-  Combines multiple partial results into a single comprehensive report and gathers references/sources.
+2. **Perplexity**: Perplexity AI's Deep Research interface
+   - No authentication required
+   - Advanced research capabilities
+   - Source citations and references
 
-- **`upload_tool.py`**  
-  Uploads the collected sources or references to Google Drive (or other storage systems in the future).
+### Browser Automation Approaches
 
-- **`e2e_tool.py`**  
-  The end-to-end pipeline that:
-  1. Generates a plan from the user query.  
-  2. Orchestrates each step.  
-  3. Combines results.  
-  4. Optionally uploads sources.  
-  5. Returns the final combined report and references.
+1. **Browser-use**: Uses the browser-use library for headless browsing
+2. **NoDriver**: Uses undetected-chromedriver for automation
+3. **Patchright**: Uses Patchright (enhanced fork of Playwright) for browser automation
+
+### Configuration
+
+All approaches share common configuration through the `ScraperConfig` class, which handles:
+- Browser window size and settings
+- Network timeouts
+- Authentication credentials
+- Retry logic
+- Site selection
+
+### Authentication
+
+Authentication is handled through the `GeminiAuth` base class for sites that require it:
+- Google account login flow
+- 2FA support
+- Login verification
+
+### Usage
+
+To use any of the research approaches:
+
+```python
+from mcp_server.tools.single_research import deep_research, BrowserApproach, ResearchConfig, ResearchSite
+
+# Configure research
+config = ResearchConfig(
+    headless=True,
+    window_width=1920,
+    window_height=1080,
+    site=ResearchSite.PERPLEXITY  # or GEMINI
+)
+
+# Execute research using chosen approach
+result = await deep_research(
+    plan="your research query",
+    approach=BrowserApproach.PATCHRIGHT,  # or BROWSER_USE, or NODRIVER
+    site=ResearchSite.PERPLEXITY,  # or GEMINI
+    config=config
+)
+```
+
+### Testing
+
+Each approach has a dedicated test script in the `scripts/` directory:
+- `test_browser_use.py`
+- `test_nodriver.py`
+- `test_patchright.py`
+
+Run tests with:
+```bash
+python -m scripts.test_nodriver --query "your query" --site perplexity --headless true
+```
+
+## Environment Variables
+
+Required environment variables for Gemini:
+- `GOOGLE_EMAIL`: Google account email
+- `GOOGLE_PASSWORD`: Google account password
+
+Optional:
+- `GOOGLE_2FA_SECRET`: If 2FA is enabled (recommended)
+
+## MCP Integration
+
+The research functionality is exposed as an MCP tool through `server.py`. The tool accepts:
+- `query`: Research query to execute
+- `site`: Research site to use (optional, defaults to Gemini)
+- `approach`: Browser approach to use (optional)
+- `headless`: Whether to run in headless mode (optional)
+- `max_retries`: Maximum retry attempts (optional)
 
 ## Usage Examples
 
-Example usage of an individual tool:
-```
-python
-from mcp_server.tools.plan_tool import generate_plan
-my_query = "Investigate the current capabilities of Gemini vs Perplexity AI"
-plan = generate_plan(my_query)
-print(plan)
+Example usage of the research tool:
+```python
+from mcp_server.tools.single_research import deep_research, BrowserApproach, ResearchSite
+
+# Using Perplexity with Patchright
+result = await deep_research(
+    "Compare GPT-4 vs Gemini in summarizing climate change data",
+    approach=BrowserApproach.PATCHRIGHT,
+    site=ResearchSite.PERPLEXITY
+)
+print(result)
+
+# Using Gemini with NoDriver
+result = await deep_research(
+    "Analyze recent Gemini updates",
+    approach=BrowserApproach.NODRIVER,
+    site=ResearchSite.GEMINI
+)
+print(result)
 ```
 
-Example usage of the entire pipeline:
-```
-python
-from mcp_server.tools.e2e_tool import full_research_pipeline
-query = "Compare GPT-4 vs Gemini in summarizing climate change data"
-result = full_research_pipeline(query, do_upload=True)
-print(result["report"])
-print(result["sources"])
-print(result["driveInfo"])
-```
+## Adding New Research Sites
 
-
-## Adding New Tools
-
-1. Create a new Python file (e.g., `my_new_tool.py`) in `tools/`.  
-2. Implement your function(s).  
-3. Integrate it in `server.py` or elsewhere if you want to expose it via the MCP server.  
-4. Update this `README.md` with details about the new tool.
+1. Create a new implementation file in `gemini_scrapers_base/` (e.g., `new_site_impl.py`)
+2. Implement the `BaseResearchScraper` interface
+3. Add the new site to the `ResearchSite` enum in `config.py`
+4. Add site configuration to `SITE_CONFIGS` in `config.py`
+5. Create a test script in `scripts/`
+6. Update this documentation
 
 ## Further Reading
 
-- [mcp_server/README.md](../README.md) for how the server is set up.
-- [../docs/](../../docs/README.md) for diagrams and technical references.
+- [mcp_server/README.md](../README.md) for server setup
+- [gemini_scrapers_base/README.md](gemini_scrapers_base/README.md) for implementation details
+- [../docs/](../../docs/README.md) for diagrams and technical references

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test script for NoDriver-based research across different sites."""
+"""Test script for Patchright-based research across different sites."""
 import asyncio
 import argparse
 from typing import Optional
@@ -12,7 +12,7 @@ from mcp_server.tools.research_engine import (
 )
 
 async def main(query: str, site: str = "gemini", headless: bool = True) -> None:
-    """Execute research using NoDriver approach"""
+    """Execute research using Patchright approach"""
     try:
         research_site = ResearchSite(site.lower())
     except ValueError:
@@ -24,7 +24,7 @@ async def main(query: str, site: str = "gemini", headless: bool = True) -> None:
     try:
         result = await deep_research(
             plan=query,
-            approach=BrowserApproach.NODRIVER,
+            approach=BrowserApproach.PATCHRIGHT,
             site=research_site,
             config=config
         )
@@ -37,7 +37,7 @@ async def main(query: str, site: str = "gemini", headless: bool = True) -> None:
         raise
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test NoDriver-based research")
+    parser = argparse.ArgumentParser(description="Test Patchright-based research")
     parser.add_argument(
         "--query",
         type=str,

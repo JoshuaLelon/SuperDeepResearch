@@ -1,111 +1,115 @@
-**Summary of Problem**  
-You need a research function that headlessly navigates Gemini (the proprietary Google AI tool) without relying on external dependencies like Selenium or “relishplus”. Instead, the function should leverage NoDriver to programmatically open pages, sign in, configure research mode, execute queries, and extract results, all while maintaining robust error handling and concurrency.
+# Implementation Plan
 
-**Summary of Solution**  
-Use NoDriver’s asynchronous approach to launch a headless Chromium-like browser. Programmatically log into Gemini, switch to the right research mode, submit queries, and parse results. This mirrors how `gemini.py` flow is structured (login, research setup, query, extraction), but replaced with NoDriver’s architecture.
+- [x] **Organize "single_research.py" to house multiple scraping functions** (one per underlying browser approach):  
+  • `browse_with_browser_use()`  
+  • `browse_with_nodriver()`  
+  • `browse_with_patchwright()`  
 
-NoDriver docs: https://ultrafunkamsterdam.github.io/nodriver/
+  Each function should:  
+  1) Initialize its respective headless browser solution.  
+  2) Handle the full Google Gemini login flow, including 2FA.  
+  3) Perform a research query.  
+  4) Return results.  
 
-Below is a step-by-step plan:
+  Then, `gemini_deep_research(plan)` can call the relevant function, depending on which browser approach is chosen.
 
----
+- [x] **Remove duplication in "mcp_server/tools/gemini_research/" and "mcp_server/tools/browser_use/"** by extracting all shared scraping/auth logic (including 2FA details) into a single, central utility module. Suggested name: `mcp_server/tools/gemini_scrapers_base/`.  
+  1) Move any common config (e.g., window size, wait times, environment vars for `GOOGLE_EMAIL` and `GOOGLE_PASSWORD`) into this location.  
+  2) Provide base classes or helper methods, e.g., `login_to_gemini(page, config)` that each sub-scraper can call.  
 
-### Implementation Plan
+- [x] **In "scripts/" create a dedicated test script for each function** from "single_research.py":  
+  • `test_browser_use.py` → calls `browse_with_browser_use()`  
+  • `test_nodriver.py` → calls `browse_with_nodriver()`  
+  • `test_patchwright.py` → calls `browse_with_patchwright()`  
 
-- [ ] **Pick or Create a New Function**  
-  - Define a function named `async def gemini_deep_research_nodriver(plan: str) -> str:` or similar.  
-  - Store it in the same file (`single_research.py`) or a new file if you prefer a separate module.
+  Each script:  
+  1) Accepts a command-line query argument (e.g. `--query`).  
+  2) Accepts an optional flag for headless vs. non-headless mode (e.g., `--headless true/false`).  
+  3) Invokes the relevant function, performing the query.  
+  4) Logs or prints success/failure messages in plain text.
 
-- [ ] **Set Up Environment and Imports**  
-  - Import the NoDriver module:  
-    ```python
-    import nodriver as uc
-    ```  
-  - Optionally import additional pieces you need from NoDriver (e.g., config, exceptions).
-  - Ensure any logging or environment config occurs properly (mirroring your `single_research.py` approach).
+- [x] **Update "run_server.py"** so it imports "server.py," and **in "server.py"**, register "single_research.py."  
+  1) Created a new `research_tool` async function in server.py that wraps `gemini_deep_research`
+  2) Added proper error handling and logging
+  3) Made the tool configurable with parameters for approach, headless mode, and retries
+  4) Registered the tool with MCP server
+  5) Updated run_server.py with proper environment loading and logging configuration
 
-- [ ] **Configure the NoDriver Browser**  
-  - Use NoDriver’s `Config` or direct method calls to specify:  
-    - `headless=True`  
-    - Possibly `user_data_dir` if you need persistent sessions  
-    - Possibly `browser_args` like `['--disable-web-security', '--disable-gpu']` if needed  
-  - Example:
-    ```python
-    config = uc.Config()
-    config.headless = True
-    # add more config if needed...
-    ```
+- [x] **Clean up "mcp_server/tools/browser_use" and "mcp_server/tools/gemini_research" directories**:  
+  1) Updated `__init__.py` files to be minimal wrappers around the centralized code
+  2) They now only re-export the necessary functions and types from single_research.py
+  3) Reduced code duplication and maintained a single source of truth
 
-- [ ] **Launch Browser Session**  
-  - Asynchronously start the browser:  
-    ```python
-    driver = await uc.start(config)
-    ```
-  - This returns a `browser` or `driver` object representing the active session.
+- [x] **Amend all README.md files** to reflect these changes:  
+  1) Root "README.md": mention that "single_research.py" is the main entry point for Gemini scraping, referencing the new central "gemini_scrapers_base."  
+  2) "mcp_server/README.md" and the "tools/README.md" inside it: describe how the scraping logic is centralized and how to choose a specific browser approach.  
+  3) "scripts/README.md": explain each test script's usage (e.g., `python -m scripts.test_browser_use --query "Gemini capabilities" --headless true`).  
+  4) Ensure each directory "README.md" includes the updated tree structure and references.  
 
-- [ ] **Implement Login Flow**  
-  1. **Navigate to Gemini**:  
-     ```python
-     tab = await driver.get("https://gemini.google.com/app")
-     ```
-  2. **Check if a “Sign in” button is present**:  
-     ```python
-     sign_in_button = await tab.find("Sign in", best_match=True)
-     if sign_in_button:
-         await sign_in_button.click()
-     ```
-  3. **Fill in credentials**:  
-     - **Handle email**:  
-       ```python
-       email_elem = await tab.select("input[type=email]")
-       await email_elem.send_keys("your_email")
-       ```
-     - **Handle password**:  
-       ```python
-       pwd_elem = await tab.select("input[type=password]")
-       await pwd_elem.send_keys("your_password")
-       ```
-     - **Submit**:  
-       ```python
-       next_button = await tab.find("next", best_match=True)
-       await next_button.click()
-       ```
-  4. **(Optional) Two-Factor**:  
-     - If you need to handle 2FA, let NoDriver wait for relevant UI elements.
+- [x] **Handle environment variables consistently** in the new central utility, especially the `GOOGLE_EMAIL`, `GOOGLE_PASSWORD`, and any 2FA tokens or codes needed for Gemini.  
 
-- [ ] **Set Up Research Mode**  
-  1. **Locate “model selector dropdown”** typically a clickable element with text “Gemini 1.5 Pro with Deep Research”.  
-  2. **Wait for load** using `await tab.sleep(1)` or a more targeted “wait for element.”  
-  3. **Select that model** (perhaps a dropdown or list item).  
-  4. **Click “Try Now”** if prompted.
+- [x] **After refactoring, finalize all README.md docs** ensuring they list new file names, function signatures, script usage instructions, and mention the mandatory 2FA steps if required.
 
-- [ ] **Submit Your Plan as a Query**  
-  - Something like:
-    ```python
-    query_elem = await tab.select("textarea, input")
-    await query_elem.send_keys(plan)
-    await query_elem.send_keys("\n")  # or click a send button
-    ```
-  - Wait for it to process. Possibly do `await tab.sleep(2)` or wait for result elements.
+# Summary
 
-- [ ] **Extract Results**  
-  1. **Check the relevant paragraph or “final response” container**.  
-  2. **Retrieve text** using NoDriver’s `Element` methods:
-     ```python
-     results_element = await tab.find("the main research findings", best_match=True)
-     extracted_text = await results_element.text()
-     return extracted_text
-     ```
-  3. **Handle edge cases** (like no result found).
+In this refactor, we've successfully consolidated several different approaches to Gemini research—browser_use, NoDriver, and Patchwright—into a single, more coherent system. The key accomplishments include:
 
-- [ ] **Tidy Up**  
-  - Close the browser with `await driver.stop()` in a `finally:` block to ensure no session leaks.  
-  - Return the results as a string.
+1. **Centralized Implementation**:
+   - All core functionality now lives in `single_research.py`
+   - Browser-specific directories are minimal wrappers
+   - Shared configuration and utilities in `gemini_scrapers_base`
 
-- [ ] **Update Documentation**  
-  - Add a short explanation of the new function in `mcp_server/tools/README.md`.  
-  - Update the parent or root `README.md` to reflect that you now have a new NoDriver-based Gemini research approach (plus any needed usage instructions).
+2. **MCP Integration**:
+   - Created a configurable `research_tool` in server.py
+   - Added proper error handling and logging
+   - Made browser approach, headless mode, and retries configurable
 
----
+3. **Clean Architecture**:
+   - Single source of truth for implementation
+   - Minimal code duplication
+   - Clear separation of concerns
 
-That’s it! Once you follow and implement these steps, you’ll have a fully working NoDriver-based Gemini research function, closely imitating the overall flow from `gemini.py`. Have fun coding!
+4. **User Experience**:
+   - Consistent interface across all browser approaches
+   - Simple configuration through environment variables
+   - Clear documentation and usage instructions
+
+The final directory structure looks like this:
+
+```bash
+.
+├── README.md
+├── run_server.py
+├── scripts
+│   ├── README.md
+│   ├── test_browser_use.py
+│   ├── test_nodriver.py
+│   ├── test_patchwright.py
+│   └── ...
+├── mcp_server
+│   ├── server.py
+│   ├── README.md
+│   ├── tools
+│   │   ├── README.md
+│   │   ├── gemini_scrapers_base
+│   │   │   ├── __init__.py
+│   │   │   ├── login.py
+│   │   │   ├── config.py
+│   │   │   └── ...
+│   │   ├── single_research.py
+│   │   ├── browser_use
+│   │   │   └── __init__.py
+│   │   └── gemini_research
+│   │       └── __init__.py
+├── docs
+│   ├── README.md
+│   └── diagrams
+│       ├── flow.md
+│       ├── sequence.md
+│       └── state.md
+├── requirements.txt
+├── pyproject.toml
+└── LICENSE
+```
+
+All tasks from the implementation plan have been completed, resulting in a more maintainable and user-friendly codebase. Users can now easily switch between browser approaches while maintaining consistent behavior and configuration options.

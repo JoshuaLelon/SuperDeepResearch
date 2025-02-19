@@ -4,6 +4,8 @@ Registers all necessary tools and runs the server.
 """
 import sys
 import logging
+import asyncio
+from typing import Optional
 
 # Completely disable all logging before importing anything else
 logging.getLogger().setLevel(logging.CRITICAL)
@@ -12,14 +14,12 @@ for handler in logging.getLogger().handlers[:]:
 logging.getLogger().addHandler(logging.NullHandler())
 
 # Now import other modules
-import httpx
 from mcp.server.fastmcp import FastMCP
-from mcp_server.tools import (
-    # generate_plan,
-    # orchestrate,
-    # combine_results,
-    # upload_to_drive,
-    full_research_pipeline
+from mcp_server.tools.research_engine import (
+    deep_research,
+    BrowserApproach,
+    ResearchConfig,
+    ResearchSite
 )
 
 def log_to_stderr(message: str) -> None:
@@ -27,17 +27,44 @@ def log_to_stderr(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 # Initialize FastMCP server
-mcp = FastMCP("weather3")
+mcp = FastMCP("SuperDeepResearch")
 
-# Register the functions as a tool
-# mcp.tool()(generate_plan)
-# mcp.tool()(orchestrate)
-# mcp.tool()(combine_results)
-# mcp.tool()(upload_to_drive)
+async def research_tool(
+    query: str,
+    site: Optional[str] = None,
+    approach: Optional[str] = None,
+    headless: bool = True,
+    max_retries: int = 3
+) -> str:
+    """
+    MCP tool for executing research using specified browser approach and site.
+    
+    Args:
+        query: Research query to execute
+        site: Research site to use (gemini or perplexity)
+        approach: Browser approach to use (browser_use, nodriver, or playwright)
+        headless: Whether to run in headless mode
+        max_retries: Maximum number of retry attempts
+    
+    Returns:
+        Research results as text
+    """
+    browser_approach = BrowserApproach(approach or BrowserApproach.PATCHRIGHT)
+    research_site = ResearchSite(site or ResearchSite.GEMINI)
+    config = ResearchConfig(headless=headless, max_retries=max_retries)
+    
+    try:
+        result = await deep_research(query, browser_approach, research_site, config)
+        return result
+    except Exception as e:
+        log_to_stderr(f"Research failed: {str(e)}")
+        raise
+
+# Register the research tool
 try:
-    log_to_stderr("Attempting to register full_research_pipeline tool...")
-    mcp.tool()(full_research_pipeline)
-    log_to_stderr("Successfully registered full_research_pipeline tool")
+    log_to_stderr("Registering research tool...")
+    mcp.tool()(research_tool)
+    log_to_stderr("Successfully registered research tool")
 except Exception as e:
     log_to_stderr(f"Error: Failed to register tool: {str(e)}")
     raise
