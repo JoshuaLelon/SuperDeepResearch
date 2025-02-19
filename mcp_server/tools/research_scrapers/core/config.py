@@ -1,7 +1,7 @@
 """Configuration module for research site scraping."""
 import os
 from dataclasses import dataclass
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, Any
 from enum import Enum
 
 class ResearchSite(str, Enum):
@@ -15,17 +15,20 @@ class SiteConfig:
     login_url: Optional[str] = None
     requires_auth: bool = False
     auth_type: Optional[str] = None
+    instructions: Optional[Any] = None
 
 SITE_CONFIGS = {
     ResearchSite.GEMINI: SiteConfig(
         url="https://gemini.google.com/app",
         login_url="https://accounts.google.com",
         requires_auth=True,
-        auth_type="google"
+        auth_type="google",
+        instructions=None  # Will be set dynamically
     ),
     ResearchSite.PERPLEXITY: SiteConfig(
         url="https://www.perplexity.ai",
-        requires_auth=False
+        requires_auth=False,
+        instructions=None  # Will be set dynamically
     )
 }
 

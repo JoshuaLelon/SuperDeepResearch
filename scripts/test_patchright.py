@@ -52,9 +52,11 @@ if __name__ == "__main__":
         help="Research site to use (default: gemini)"
     )
     parser.add_argument(
-        "--headless",
-        action='store_false',
-        help="Run in non-headless mode (default: True)"
+        "--no-headless",
+        dest="headless",
+        action="store_false",
+        default=True,
+        help="Show browser window (default: run in headless mode)"
     )
     
     args = parser.parse_args()

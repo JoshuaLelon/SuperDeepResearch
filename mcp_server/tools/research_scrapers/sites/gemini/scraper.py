@@ -1,11 +1,11 @@
 """Gemini-specific implementation for research scraping."""
 import logging
 import asyncio
-from typing import Optional, Any
+from typing import Optional, Any, List
 from patchright.async_api import async_playwright, Browser, Page
 from dataclasses import dataclass
 
-from ....logging_config import setup_logging
+from .....logging_config import setup_logging
 from ...core.base import BaseResearchScraper
 from ...core.auth import GeminiAuth
 from ...core.config import ScraperConfig, ResearchSite
