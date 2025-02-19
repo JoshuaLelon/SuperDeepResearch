@@ -1,14 +1,18 @@
 """Browser-Use based implementation for research scraping."""
 import logging
-from typing import Optional, Any
+import asyncio
+from typing import Optional, Any, Type
 from browser_use import Agent, BrowserConfig, Browser, BrowserContextConfig
 from langchain_openai import ChatOpenAI
 
 from ..core.base import BaseResearchScraper
 from ..core.auth import GeminiAuth
 from ..core.config import ScraperConfig, ResearchSite
+from ....logging_config import setup_logging
+from ..sites.perplexity.scraper import PerplexitySiteInstructions
+from ..sites.gemini.scraper import GeminiSiteInstructions
 
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__)
 
 class BrowserUseAuth(GeminiAuth):
     """Browser-Use specific implementation of Gemini authentication"""
@@ -37,23 +41,26 @@ class BrowserUseAuth(GeminiAuth):
         """Verification handled by Browser-Use agent"""
         return True
 
-class BrowserUseScraper(BaseResearchScraper):
-    """Browser-Use implementation of Gemini scraper"""
+class BrowserUseDriver(BaseResearchScraper):
+    """Browser-Use implementation of research scraper"""
     
     def __init__(self, config: Optional[ScraperConfig] = None):
         super().__init__(config)
         self.browser = None
         self.agent = None
         self.llm = ChatOpenAI(model="gpt-4", temperature=0.0)
+        self._site_instructions = None
         
     @property
-    def auth(self) -> GeminiAuth:
-        """Get Browser-Use specific auth handler"""
-        if not self._auth and self.config.site == ResearchSite.GEMINI:
-            if not self.agent:
-                raise RuntimeError("Browser agent not initialized")
-            self._auth = BrowserUseAuth(self.config, self.agent)
-        return self._auth
+    def site_instructions(self) -> Any:
+        """Get the appropriate site instructions for the current site"""
+        if not self._site_instructions:
+            site_map = {
+                ResearchSite.PERPLEXITY: PerplexitySiteInstructions,
+                ResearchSite.GEMINI: GeminiSiteInstructions
+            }
+            self._site_instructions = site_map[self.config.site].BrowserUse
+        return self._site_instructions
         
     async def setup(self) -> None:
         """Initialize Browser-Use browser"""
@@ -86,62 +93,46 @@ class BrowserUseScraper(BaseResearchScraper):
             logger.info("Browser stopped successfully")
 
     async def handle_site_specific_research(self, site: ResearchSite, query: str) -> str:
-        """Handle research for specific sites"""
-        if site == ResearchSite.PERPLEXITY:
-            try:
-                # Create agent with research task
-                task = (
-                    f"Go to {self.config.site_config.url}\n"
-                    f"Click the 'Deep Research' button\n"
-                    f"Wait for the input field to appear\n"
-                    f"Enter this research query: {query}\n"
-                    f"Press Enter and wait for the complete response\n"
-                    f"Extract the response content"
-                )
-                
-                self.agent = Agent(
-                    task=task,
-                    llm=self.llm,
-                    browser=self.browser,
-                    generate_gif=False,
-                    max_input_tokens=32000,
-                    max_actions_per_step=3
-                )
-                
-                result = await self.agent.run(max_steps=5)
-                return result.final_result() or "No results found"
-                
-            except Exception as e:
-                logger.error(f"Query submission error: {str(e)}")
-                raise
-        elif site == ResearchSite.GEMINI:
-            try:
-                # Create agent with research task
-                task = (
-                    f"Go to {self.config.site_config.url}\n"
-                    f"Log in with email '{self.config.google_email}' and password '{self.config.google_password}'\n"
-                    f"Enter this research query: {query}\n"
-                    f"Wait for and extract the complete response"
-                )
-                
-                self.agent = Agent(
-                    task=task,
-                    llm=self.llm,
-                    browser=self.browser,
-                    generate_gif=False,
-                    max_input_tokens=32000,
-                    max_actions_per_step=3
-                )
-                
-                result = await self.agent.run(max_steps=5)
-                return result.final_result() or "No results found"
-                
-            except Exception as e:
-                logger.error(f"Query submission error: {str(e)}")
-                raise
-        else:
-            raise ValueError(f"Unsupported research site: {site}")
-
+        """Handle research using site-specific instructions"""
+        instructions = self.site_instructions.instructions
+        
+        try:
+            # Create task using site-specific template and instructions
+            task = self.site_instructions.TASK_TEMPLATE.format(
+                url=self.config.site_config.url,
+                query=query,
+                input_selectors=", ".join(instructions.selectors.input_field),
+                response_selectors=", ".join(instructions.selectors.response_content),
+                pre_wait=instructions.navigation.pre_input_wait_time,
+                post_wait=instructions.navigation.post_input_wait_time,
+                response_wait=instructions.navigation.response_wait_time
+            )
+            
+            # Create agent with the task
+            self.agent = Agent(
+                task=task,
+                llm=self.llm,
+                browser=self.browser,
+                generate_gif=False,
+                max_input_tokens=32000,
+                max_actions_per_step=3
+            )
+            
+            # Execute the task and get results
+            logger.info("Executing Browser-Use agent task...")
+            result = await self.agent.run(max_steps=5)
+            
+            if result.final_result():
+                logger.info("Found results")
+                return result.final_result()
+            
+            logger.warning("No results found")
+            return "No results found"
+            
+        except Exception as e:
+            logger.error(f"Query submission error: {str(e)}")
+            raise
+    
     async def execute_research(self, query: str) -> str:
         """Execute research using Browser-Use"""
         return await self.handle_site_specific_research(self.config.site, query) 

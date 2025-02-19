@@ -11,8 +11,10 @@ from typing import Any, Dict, Optional
 from enum import Enum
 from dataclasses import dataclass
 
+from ..logging_config import setup_logging
+
 # Set up logging
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__)
 logger.setLevel(logging.INFO)
 
 # Create console handler with formatting
@@ -28,11 +30,9 @@ from browser_use import Agent, BrowserConfig, Browser, BrowserContextConfig
 from .research_scrapers import (
     ScraperConfig,
     ResearchSite,
-    BrowserUseScraper,
-    NoDriverScraper,
-    PatchrightScraper,
-    GeminiScraper,
-    PerplexityScraper
+    BrowserUseDriver,
+    NoDriverDriver,
+    PatchrightDriver
 )
 from dotenv import load_dotenv
 
@@ -56,7 +56,7 @@ class ResearchConfig:
 
 async def browse_with_browser_use(query: str, config: ResearchConfig) -> str:
     """Execute research using browser-use library"""
-    scraper = BrowserUseScraper(ScraperConfig(
+    driver = BrowserUseDriver(ScraperConfig(
         headless=config.headless,
         window_size=(config.window_width, config.window_height),
         network_idle_timeout=config.network_idle_timeout,
@@ -64,58 +64,50 @@ async def browse_with_browser_use(query: str, config: ResearchConfig) -> str:
     ))
     
     try:
-        await scraper.setup()
-        await scraper.login()
-        result = await scraper.execute_research(query)
+        await driver.setup()
+        await driver.login()
+        result = await driver.execute_research(query)
         return result
     finally:
-        await scraper.cleanup()
+        await driver.cleanup()
 
 async def browse_with_nodriver(query: str, config: ResearchConfig) -> str:
     """Execute research using NoDriver automation"""
-    scraper = NoDriverScraper(ScraperConfig(
+    driver = NoDriverDriver(ScraperConfig(
         headless=config.headless,
         window_size=(config.window_width, config.window_height),
         site=config.site
     ))
     
     try:
-        await scraper.setup()
-        await scraper.login()
-        result = await scraper.execute_research(query)
+        await driver.setup()
+        await driver.login()
+        result = await driver.execute_research(query)
         return result
     finally:
-        await scraper.cleanup()
+        await driver.cleanup()
 
 async def browse_with_patchright(query: str, config: ResearchConfig) -> str:
     """Execute research using Patchright automation"""
     logger.info(f"Starting Patchright research for site: {config.site}")
-    if config.site == ResearchSite.PERPLEXITY:
-        logger.info("Initializing Perplexity scraper...")
-        scraper = PerplexityScraper(ScraperConfig(
-            headless=config.headless,
-            window_size=(config.window_width, config.window_height),
-            site=config.site
-        ))
-    else:
-        logger.info("Initializing Gemini scraper...")
-        scraper = GeminiScraper(ScraperConfig(
-            headless=config.headless,
-            window_size=(config.window_width, config.window_height),
-            site=config.site
-        ))
+    
+    driver = PatchrightDriver(ScraperConfig(
+        headless=config.headless,
+        window_size=(config.window_width, config.window_height),
+        site=config.site
+    ))
     
     try:
         logger.info("Setting up browser...")
-        await scraper.setup()
+        await driver.setup()
         logger.info("Browser setup complete")
         
         logger.info("Attempting login...")
-        await scraper.login()
+        await driver.login()
         logger.info("Login complete")
         
         logger.info("Executing research query...")
-        result = await scraper.execute_research(query)
+        result = await driver.execute_research(query)
         logger.info("Research complete")
         return result
     except Exception as e:
@@ -123,7 +115,7 @@ async def browse_with_patchright(query: str, config: ResearchConfig) -> str:
         raise
     finally:
         logger.info("Cleaning up browser resources...")
-        await scraper.cleanup()
+        await driver.cleanup()
         logger.info("Cleanup complete")
 
 async def deep_research(

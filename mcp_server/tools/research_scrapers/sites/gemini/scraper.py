@@ -3,12 +3,172 @@ import logging
 import asyncio
 from typing import Optional, Any
 from patchright.async_api import async_playwright, Browser, Page
+from dataclasses import dataclass
 
+from ....logging_config import setup_logging
 from ...core.base import BaseResearchScraper
 from ...core.auth import GeminiAuth
 from ...core.config import ScraperConfig, ResearchSite
 
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__)
+
+@dataclass
+class SelectorSet:
+    """Common selectors used across different actions"""
+    input_field: List[str]
+    submit_button: Optional[str]
+    response_content: List[str]
+    sign_in_button: List[str]
+    email_input: List[str]
+    password_input: List[str]
+    next_button: List[str]
+    two_factor_input: List[str]
+
+@dataclass
+class NavigationSteps:
+    """Common navigation steps"""
+    pre_input_wait_time: float
+    post_input_wait_time: float
+    response_wait_time: float
+    auth_step_wait_time: float
+
+@dataclass
+class DriverInstructions:
+    """Base class for driver-specific instructions"""
+    selectors: SelectorSet
+    navigation: NavigationSteps
+    requires_auth: bool = True
+
+class GeminiSiteInstructions:
+    """
+    Contains all instructions for scraping Gemini, organized by driver.
+    Each driver section contains the exact selectors, navigation steps, and other
+    instructions needed to scrape Gemini using that specific driver.
+    """
+    
+    class Patchright:
+        """Instructions specific to Patchright automation"""
+        instructions = DriverInstructions(
+            selectors=SelectorSet(
+                input_field=[
+                    'textarea[aria-label*="chat input"]',
+                    'textarea[placeholder*="Enter a prompt"]'
+                ],
+                submit_button=None,  # Uses Enter key instead
+                response_content=[
+                    '.chat-message[role="presentation"]',
+                    '.response-content'
+                ],
+                sign_in_button=[
+                    '[data-test-id="action-button"]',
+                    'a:has-text("Sign in")'
+                ],
+                email_input=['input[type="email"]'],
+                password_input=['input[type="password"]'],
+                next_button=['button:has-text("Next")'],
+                two_factor_input=['input[type="tel"]']
+            ),
+            navigation=NavigationSteps(
+                pre_input_wait_time=2.0,
+                post_input_wait_time=2.0,
+                response_wait_time=10.0,
+                auth_step_wait_time=5.0
+            )
+        )
+        
+        # Additional Patchright-specific methods
+        @staticmethod
+        async def submit_query(page: Any, query: str) -> None:
+            """How to submit a query using Patchright"""
+            await page.fill('textarea', query)
+            await page.keyboard.press('Enter')
+    
+    class NoDriver:
+        """Instructions specific to NoDriver automation"""
+        instructions = DriverInstructions(
+            selectors=SelectorSet(
+                input_field=[
+                    'textarea[aria-label*="chat input"]',
+                    'textarea[placeholder*="Enter a prompt"]',
+                    'Enter a prompt here'  # For fuzzy text matching
+                ],
+                submit_button=None,
+                response_content=[
+                    '.chat-message[role="presentation"]',
+                    '.response-content'
+                ],
+                sign_in_button=['Sign in'],  # For fuzzy text matching
+                email_input=['input[type="email"]', 'email'],
+                password_input=['input[type="password"]', 'password'],
+                next_button=['Next'],  # For fuzzy text matching
+                two_factor_input=['input[type="tel"]']
+            ),
+            navigation=NavigationSteps(
+                pre_input_wait_time=2.0,
+                post_input_wait_time=2.0,
+                response_wait_time=10.0,
+                auth_step_wait_time=5.0
+            )
+        )
+        
+        # Additional NoDriver-specific methods
+        @staticmethod
+        async def submit_query(page: Any, query: str) -> None:
+            """How to submit a query using NoDriver"""
+            input_elem = await page.select('textarea')
+            if not input_elem:
+                input_elem = await page.find("Enter a prompt here", best_match=True)
+            await input_elem.send_keys(query)
+            await input_elem.send_keys("\n")
+    
+    class BrowserUse:
+        """Instructions specific to Browser-Use automation"""
+        instructions = DriverInstructions(
+            selectors=SelectorSet(
+                input_field=[
+                    'textarea[aria-label*="chat input"]',
+                    'textarea[placeholder*="Enter a prompt"]'
+                ],
+                submit_button=None,
+                response_content=[
+                    '.chat-message[role="presentation"]',
+                    '.response-content'
+                ],
+                sign_in_button=[
+                    '[data-test-id="action-button"]',
+                    'a:has-text("Sign in")'
+                ],
+                email_input=['input[type="email"]'],
+                password_input=['input[type="password"]'],
+                next_button=['button:has-text("Next")'],
+                two_factor_input=['input[type="tel"]']
+            ),
+            navigation=NavigationSteps(
+                pre_input_wait_time=3.0,
+                post_input_wait_time=3.0,
+                response_wait_time=10.0,
+                auth_step_wait_time=5.0
+            )
+        )
+        
+        # Task templates for Browser-Use agent
+        TASK_TEMPLATE = """
+        Go to {url}
+        Log in with email '{email}' and password '{password}'
+        Wait for the input field to appear
+        Enter this research query: {query}
+        Press Enter and wait for the complete response
+        Extract the response content
+        """
+        
+        AUTH_TEMPLATE = """
+        Click the sign in button
+        Enter email '{email}' in the email input
+        Click Next
+        Enter password '{password}' in the password input
+        Click Next
+        Wait for the chat interface to load
+        """
 
 class GeminiPatchrightAuth(GeminiAuth):
     """Patchright-specific implementation of Gemini authentication"""

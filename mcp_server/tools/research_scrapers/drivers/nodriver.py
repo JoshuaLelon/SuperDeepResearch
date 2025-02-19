@@ -1,6 +1,7 @@
 """NoDriver-based implementation for research scraping."""
 import logging
-from typing import Optional, Any
+import asyncio
+from typing import Optional, Any, Type
 import nodriver
 from nodriver import Browser, Config
 from langchain_openai import ChatOpenAI
@@ -8,8 +9,11 @@ from langchain_openai import ChatOpenAI
 from ..core.base import BaseResearchScraper
 from ..core.auth import GeminiAuth
 from ..core.config import ScraperConfig, ResearchSite
+from ....logging_config import setup_logging
+from ..sites.perplexity.scraper import PerplexitySiteInstructions
+from ..sites.gemini.scraper import GeminiSiteInstructions
 
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__)
 
 class NoDriverAuth(GeminiAuth):
     """NoDriver-specific implementation of Gemini authentication"""
@@ -80,23 +84,25 @@ class NoDriverAuth(GeminiAuth):
         except Exception:
             return False
 
-class NoDriverScraper(BaseResearchScraper):
-    """NoDriver implementation of Gemini scraper"""
+class NoDriverDriver(BaseResearchScraper):
+    """NoDriver implementation of research scraper"""
     
     def __init__(self, config: Optional[ScraperConfig] = None):
         super().__init__(config)
-        self.gemini_url = "https://gemini.google.com/app"
         self.driver = None
         self.page = None
+        self._site_instructions = None
         
     @property
-    def auth(self) -> GeminiAuth:
-        """Get NoDriver-specific auth handler"""
-        if not self._auth:
-            if not self.page:
-                raise RuntimeError("Browser page not initialized")
-            self._auth = NoDriverAuth(self.config, self.page)
-        return self._auth
+    def site_instructions(self) -> Any:
+        """Get the appropriate site instructions for the current site"""
+        if not self._site_instructions:
+            site_map = {
+                ResearchSite.PERPLEXITY: PerplexitySiteInstructions,
+                ResearchSite.GEMINI: GeminiSiteInstructions
+            }
+            self._site_instructions = site_map[self.config.site].NoDriver
+        return self._site_instructions
         
     async def setup(self) -> None:
         """Initialize NoDriver browser"""
@@ -123,80 +129,65 @@ class NoDriverScraper(BaseResearchScraper):
             logger.info("Browser stopped successfully")
 
     async def handle_site_specific_research(self, site: ResearchSite, query: str) -> str:
-        """Handle research for specific sites"""
-        if site == ResearchSite.PERPLEXITY:
-            try:
-                # Click "Deep Research" button
-                logger.info("Looking for Deep Research button...")
-                deep_research_button = await self.page.find("Deep Research", best_match=True)
-                if deep_research_button:
-                    await deep_research_button.click()
-                    await self.page.sleep(2)
+        """Handle research using site-specific instructions"""
+        instructions = self.site_instructions.instructions
+        
+        try:
+            # Look for input field using site-specific selectors
+            logger.info("Looking for query input field...")
+            input_elem = None
+            
+            # Try each input selector
+            for selector in instructions.selectors.input_field:
+                try:
+                    input_elem = await self.page.select(selector)
+                    if input_elem:
+                        break
+                except Exception:
+                    try:
+                        # NoDriver's fallback to fuzzy text matching
+                        input_elem = await self.page.find(selector, best_match=True)
+                        if input_elem:
+                            break
+                    except Exception:
+                        continue
+            
+            if input_elem:
+                logger.info("Found input field, entering query...")
+                await self.page.sleep(instructions.navigation.pre_input_wait_time)
                 
-                # Look for input field and enter query
-                logger.info("Looking for query input field...")
-                input_elem = await self.page.select('textarea[placeholder*="Ask anything"]')
-                if not input_elem:
-                    input_elem = await self.page.find("Ask anything", best_match=True)
+                # Use site-specific submit method
+                await self.site_instructions.submit_query(self.page, query)
                 
-                if input_elem:
-                    logger.info("Found input field, entering query...")
-                    await input_elem.send_keys(query)
-                    await input_elem.send_keys("\n")
-                    
-                    # Wait for response
-                    logger.info("Waiting for response...")
-                    await self.page.sleep(10)
-                    
-                    # Look for results
-                    logger.info("Looking for response content...")
-                    results = await self.page.find(".response-content", best_match=True)
-                    if results:
-                        logger.info("Found results")
-                        return await results.text()
-                    
-                    logger.warning("No results found")
-                    return "No results found"
-                else:
-                    raise RuntimeError("Query input not found")
+                await self.page.sleep(instructions.navigation.post_input_wait_time)
                 
-            except Exception as e:
-                logger.error(f"Query submission error: {str(e)}")
-                raise
-        elif site == ResearchSite.GEMINI:
-            try:
-                # Look for input field
-                logger.info("Looking for query input field...")
-                input_elem = await self.page.select("textarea")
-                if not input_elem:
-                    input_elem = await self.page.find("Enter a prompt here", best_match=True)
+                # Look for results using site-specific selectors
+                logger.info("Looking for response content...")
+                await self.page.sleep(instructions.navigation.response_wait_time)
                 
-                if input_elem:
-                    logger.info("Found input field, entering query...")
-                    await input_elem.send_keys(query)
-                    await input_elem.send_keys("\n")
-                    
-                    # Wait for response
-                    logger.info("Waiting for response...")
-                    await self.page.sleep(10)
-                    
-                    # Look for results
-                    logger.info("Looking for response content...")
-                    results = await self.page.find(".response-content", best_match=True)
-                    if results:
-                        logger.info("Found results, extracting text...")
-                        return await results.text()
-                    logger.warning("No results found")
-                    return "No results found"
-                else:
-                    raise RuntimeError("Query input not found")
+                for selector in instructions.selectors.response_content:
+                    try:
+                        results_elem = await self.page.select(selector)
+                        if not results_elem:
+                            results_elem = await self.page.find(selector, best_match=True)
+                        
+                        if results_elem:
+                            results = await results_elem.text()
+                            if results:
+                                logger.info(f"Found results using selector: {selector}")
+                                return results
+                    except Exception:
+                        continue
                 
-            except Exception as e:
-                logger.error(f"Query submission error: {str(e)}")
-                raise
-        else:
-            raise ValueError(f"Unsupported research site: {site}")
-
+                logger.warning("No results found with any selector")
+                return "No results found"
+            else:
+                raise RuntimeError("Query input not found")
+            
+        except Exception as e:
+            logger.error(f"Query submission error: {str(e)}")
+            raise
+    
     async def execute_research(self, query: str) -> str:
         """Execute research using NoDriver"""
         return await self.handle_site_specific_research(self.config.site, query) 

@@ -1,36 +1,20 @@
-"""Research scraper implementations for various AI research sites."""
+"""Research scraping implementations."""
+from .core.config import ScraperConfig, ResearchSite
+from .core.base import BaseResearchScraper
+from .core.auth import GeminiAuth
 
-from .core import (
-    BaseResearchScraper,
-    GeminiAuth,
-    ScraperConfig,
-    ResearchSite,
-    SiteConfig,
-    SITE_CONFIGS
-)
 from .drivers import (
-    BrowserUseScraper,
-    NoDriverScraper,
-    PatchrightScraper
-)
-from .sites import (
-    GeminiScraper,
-    PerplexityScraper
+    BrowserUseDriver,
+    NoDriverDriver,
+    PatchrightDriver
 )
 
 __all__ = [
-    # Core
-    'BaseResearchScraper',
-    'GeminiAuth',
     'ScraperConfig',
     'ResearchSite',
-    'SiteConfig',
-    'SITE_CONFIGS',
-    # Drivers
-    'BrowserUseScraper',
-    'NoDriverScraper',
-    'PatchrightScraper',
-    # Sites
-    'GeminiScraper',
-    'PerplexityScraper'
+    'BaseResearchScraper',
+    'GeminiAuth',
+    'BrowserUseDriver',
+    'NoDriverDriver',
+    'PatchrightDriver'
 ] 

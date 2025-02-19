@@ -1,87 +1,133 @@
 # Research Scrapers
 
-This module implements a layered architecture for browser automation across different AI research sites.
+This module provides a framework for scraping research from various AI research sites using different browser automation approaches.
 
 ## Architecture
 
-The implementation is split into two distinct layers:
+The framework is organized into three main components:
 
-### 1. Browser Automation Layer (`drivers/`)
-The "HOW" layer - handles different ways to automate browsers:
-- `browser_use.py` - Uses browser-use library with LLM-based agent
-- `nodriver.py` - Uses undetected-chromedriver for stealth automation
-- `patchright.py` - Uses enhanced Playwright for robust control
+1. **Site Instructions** (`sites/`):
+   - Each site (e.g., Perplexity, Gemini) has its own module containing all site-specific instructions
+   - Instructions include selectors, navigation steps, and authentication methods
+   - Each site's instructions are organized by driver (Patchright, NoDriver, Browser-Use)
 
-Each driver implementation:
-- Handles browser lifecycle (setup/cleanup)
-- Manages authentication flows
-- Provides basic browser operations
+2. **Drivers** (`drivers/`):
+   - Browser automation implementations that know HOW to execute instructions
+   - Each driver reads site-specific instructions and executes them using its automation approach
+   - Available drivers:
+     - `PatchrightDriver`: Uses Patchright for automation
+     - `NoDriverDriver`: Uses NoDriver for automation
+     - `BrowserUseDriver`: Uses Browser-Use for automation
 
-### 2. Site-Specific Layer (`sites/`)
-The "WHAT" layer - handles site-specific interactions:
-- `gemini/` - Gemini-specific UI interactions and flows
-- `perplexity/` - Perplexity-specific UI interactions and flows
-
-Each site implementation:
-- Defines site-specific UI selectors and interactions
-- Handles site-specific response parsing
-- Manages site-specific authentication requirements
-
-### Core Layer (`core/`)
-Shared abstractions and utilities:
-- `base.py` - Base scraper interface
-- `auth.py` - Authentication base classes
-- `config.py` - Configuration and site definitions
-
-## Adding New Components
-
-### New Browser Automation Approach
-1. Add new driver in `drivers/`
-2. Implement `BaseResearchScraper`
-3. Handle browser lifecycle and auth
-4. Register in `drivers/__init__.py`
-
-### New Research Site
-1. Add site config to `core/config.py`
-2. Create site directory in `sites/`
-3. Implement site-specific scraper
-4. Register in `sites/__init__.py`
+3. **Core** (`core/`):
+   - Base classes and shared functionality
+   - Configuration and type definitions
+   - Authentication base classes
 
 ## Usage
 
 ```python
-from mcp_server.tools.research_scrapers import (
+from research_scrapers import (
     ScraperConfig,
     ResearchSite,
-    BrowserUseScraper,  # or NoDriverScraper, PatchrightScraper
+    BrowserUseDriver  # or NoDriverDriver, PatchrightDriver
 )
 
-# Configure scraping
+# Create configuration
 config = ScraperConfig(
     headless=True,
-    site=ResearchSite.PERPLEXITY  # or GEMINI
+    window_size=(1920, 1080),
+    site=ResearchSite.PERPLEXITY
 )
 
-# Create scraper instance
-scraper = BrowserUseScraper(config)
+# Initialize driver
+driver = BrowserUseDriver(config)
 
 # Execute research
-try:
-    await scraper.setup()
-    await scraper.login()  # if required
-    result = await scraper.execute_research("your query")
-finally:
-    await scraper.cleanup()
+async def do_research():
+    try:
+        await driver.setup()
+        await driver.login()  # If required
+        result = await driver.execute_research("Your research query")
+        print(result)
+    finally:
+        await driver.cleanup()
 ```
+
+## Adding New Sites
+
+1. Create a new directory under `sites/` for your site
+2. Create a `scraper.py` with site-specific instructions:
+   ```python
+   class YourSiteInstructions:
+       class Patchright:
+           instructions = DriverInstructions(...)
+           
+       class NoDriver:
+           instructions = DriverInstructions(...)
+           
+       class BrowserUse:
+           instructions = DriverInstructions(...)
+   ```
+
+## Adding New Drivers
+
+1. Create a new driver class in `drivers/`
+2. Inherit from `BaseResearchScraper`
+3. Implement the required methods to execute site instructions using your automation approach
+
+## Configuration
+
+The `ScraperConfig` class accepts:
+- `headless`: Whether to run in headless mode
+- `window_size`: Browser window dimensions
+- `site`: Which research site to use (from `ResearchSite` enum)
+- `auth_cookies`: Optional authentication cookies
+- Additional site-specific configuration
 
 ## Testing
 
-Each browser automation approach has a dedicated test script in `scripts/`:
-- `test_browser_use.py`
-- `test_nodriver.py`
-- `test_patchright.py`
-
-Run tests with:
+### Unit Tests
+Run the test suite:
 ```bash
-python -m scripts.test_patchright --query "query" --site perplexity --headless true
-``` 
+pytest tests/
+```
+
+### Integration Tests
+Test specific browser automation:
+```bash
+python -m scripts.test_browser_use --query "test query" --site perplexity
+python -m scripts.test_nodriver --query "test query" --site gemini
+python -m scripts.test_patchright --query "test query" --site perplexity
+```
+
+### Test Configuration
+Set up test environment:
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+Required environment variables:
+- `GOOGLE_EMAIL`: Google account email
+- `GOOGLE_PASSWORD`: Google account password
+- `OPENAI_API_KEY`: OpenAI API key (for Browser-Use)
+
+### Browser Profiles
+For development/testing:
+1. Use a separate browser profile
+2. Log in to required services manually
+3. Export cookies to avoid repeated logins
+
+### Debugging
+Enable verbose logging:
+```python
+import logging
+logging.getLogger().setLevel(logging.DEBUG)
+```
+
+Common issues:
+- Browser detection: Try different evasion settings
+- Auth failures: Check credentials and cookies
+- Timeouts: Adjust wait times
+- Selectors: Update if site UI changes 

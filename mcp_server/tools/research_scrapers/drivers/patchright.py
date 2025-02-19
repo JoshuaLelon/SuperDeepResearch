@@ -1,14 +1,17 @@
 """Patchright-based implementation for research scraping."""
 import logging
 import asyncio
-from typing import Optional, Any
+from typing import Optional, Any, Type
 from patchright.async_api import async_playwright, Browser, Page, BrowserContext
 
 from ..core.base import BaseResearchScraper
 from ..core.auth import GeminiAuth
 from ..core.config import ScraperConfig, ResearchSite
+from ....logging_config import setup_logging
+from ..sites.perplexity.scraper import PerplexitySiteInstructions
+from ..sites.gemini.scraper import GeminiSiteInstructions
 
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__)
 
 class PatchrightAuth(GeminiAuth):
     """Patchright-specific implementation of Gemini authentication"""
@@ -71,7 +74,7 @@ class PatchrightAuth(GeminiAuth):
         except Exception:
             return False
 
-class PatchrightScraper(BaseResearchScraper):
+class PatchrightDriver(BaseResearchScraper):
     """Patchright implementation of research scraper"""
     
     def __init__(self, config: Optional[ScraperConfig] = None):
@@ -79,15 +82,18 @@ class PatchrightScraper(BaseResearchScraper):
         self.patchright = None
         self.browser = None
         self.page = None
+        self._site_instructions = None
         
     @property
-    def auth(self) -> Optional[GeminiAuth]:
-        """Get Patchright-specific auth handler"""
-        if not self._auth and self.config.site == ResearchSite.GEMINI:
-            if not self.page:
-                raise RuntimeError("Browser page not initialized")
-            self._auth = PatchrightAuth(self.config, self.page)
-        return self._auth
+    def site_instructions(self) -> Any:
+        """Get the appropriate site instructions for the current site"""
+        if not self._site_instructions:
+            site_map = {
+                ResearchSite.PERPLEXITY: PerplexitySiteInstructions,
+                ResearchSite.GEMINI: GeminiSiteInstructions
+            }
+            self._site_instructions = site_map[self.config.site].Patchright
+        return self._site_instructions
         
     async def setup(self) -> None:
         """Initialize Patchright browser"""
@@ -150,29 +156,47 @@ class PatchrightScraper(BaseResearchScraper):
             logger.info("Browser stopped successfully")
 
     async def handle_site_specific_research(self, site: ResearchSite, query: str) -> str:
-        """Handle research for Gemini"""
-        if site != ResearchSite.GEMINI:
-            raise ValueError(f"This scraper only handles Gemini research, not {site}")
-            
+        """Handle research using site-specific instructions"""
+        instructions = self.site_instructions.instructions
+        
         try:
-            # Look for input field and enter query
+            # Look for input field using site-specific selectors
             logger.info("Looking for query input field...")
-            await self.page.fill('textarea', query)
-            await self.page.keyboard.press('Enter')
+            input_elem = None
+            for selector in instructions.selectors.input_field:
+                try:
+                    input_elem = await self.page.locator(selector).first
+                    if input_elem:
+                        break
+                except Exception:
+                    continue
             
-            # Wait for response
-            logger.info("Waiting for response...")
-            await asyncio.sleep(10)
-            
-            # Look for results
-            logger.info("Looking for response content...")
-            results = await self.page.locator('.response-content').text_content()
-            if results:
-                logger.info("Found results")
-                return results
-            
-            logger.warning("No results found")
-            return "No results found"
+            if input_elem:
+                logger.info("Found input field, entering query...")
+                await asyncio.sleep(instructions.navigation.pre_input_wait_time)
+                
+                # Use site-specific submit method
+                await self.site_instructions.submit_query(self.page, query)
+                
+                await asyncio.sleep(instructions.navigation.post_input_wait_time)
+                
+                # Look for results using site-specific selectors
+                logger.info("Looking for response content...")
+                await asyncio.sleep(instructions.navigation.response_wait_time)
+                
+                for selector in instructions.selectors.response_content:
+                    try:
+                        results = await self.page.locator(selector).text_content()
+                        if results:
+                            logger.info(f"Found results using selector: {selector}")
+                            return results
+                    except Exception:
+                        continue
+                
+                logger.warning("No results found with any selector")
+                return "No results found"
+            else:
+                raise RuntimeError("Query input not found")
             
         except Exception as e:
             logger.error(f"Query submission error: {str(e)}")

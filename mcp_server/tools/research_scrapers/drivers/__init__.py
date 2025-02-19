@@ -1,11 +1,11 @@
-"""Browser automation implementations for research scrapers."""
+"""Driver implementations for research scraping."""
 
-from .browser_use import BrowserUseScraper
-from .nodriver import NoDriverScraper
-from .patchright import PatchrightScraper
+from .browser_use import BrowserUseDriver
+from .nodriver import NoDriverDriver
+from .patchright import PatchrightDriver
 
 __all__ = [
-    'BrowserUseScraper',
-    'NoDriverScraper',
-    'PatchrightScraper'
+    'BrowserUseDriver',
+    'NoDriverDriver',
+    'PatchrightDriver'
 ] 
