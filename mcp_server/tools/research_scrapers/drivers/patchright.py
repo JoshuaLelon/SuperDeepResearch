@@ -286,8 +286,8 @@ class PatchrightDriver(BaseResearchScraper):
             await self.page.goto(self.config.site_config.url)
             await self.page.wait_for_load_state('networkidle')
             
-            # Only handle login if site requires auth
-            if self.config.site_config.requires_auth:
+            # Handle login if required or should_login is true
+            if self.config.site_config.requires_auth or self.config.site_config.should_login:
                 popup = await self.site_instructions.handle_login_flow(self.page)
                 await self._handle_google_login(popup)
                 await popup.wait_for_event('close', timeout=30000)

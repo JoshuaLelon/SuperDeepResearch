@@ -14,6 +14,7 @@ class SiteConfig:
     url: str
     login_url: Optional[str] = None
     requires_auth: bool = False
+    should_login: bool = False  # Whether to attempt login even if not required
     auth_type: Optional[str] = None
     instructions: Optional[Any] = None
 
@@ -22,12 +23,16 @@ SITE_CONFIGS = {
         url="https://gemini.google.com/app",
         login_url="https://accounts.google.com",
         requires_auth=True,
+        should_login=True,
         auth_type="google",
         instructions=None  # Will be set dynamically
     ),
     ResearchSite.PERPLEXITY: SiteConfig(
         url="https://www.perplexity.ai",
+        login_url="https://accounts.google.com",
         requires_auth=False,
+        should_login=True,
+        auth_type="google",
         instructions=None  # Will be set dynamically
     )
 }

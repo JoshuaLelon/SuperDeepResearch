@@ -90,40 +90,151 @@ class PerplexitySiteInstructions:
                     login_button = await page.wait_for_selector(selector, timeout=5000, state='visible')
                     if login_button:
                         logger.info(f"Found login button with selector: {selector}")
+                        # Move mouse like a human would
+                        box = await login_button.bounding_box()
+                        if box:
+                            await page.mouse.move(
+                                box['x'] + box['width'] / 2,
+                                box['y'] + box['height'] / 2,
+                                steps=10
+                            )
+                            await asyncio.sleep(0.1)
                         await login_button.click()
-                        await asyncio.sleep(2)
                         break
                 except Exception:
                     continue
+            
+            # Wait for modal to appear and stabilize
+            logger.info("Waiting for login modal to stabilize...")
+            await asyncio.sleep(2)
             
             # Find and click Google login
             logger.info("Looking for Google login button...")
-            google_selectors = [
-                'button:has-text("Continue with Google")',
-                'button.bg-super:has-text("Continue with Google")',
-                'button:has(.fa-google)',
-                '[aria-label="Continue with Google"]',
-                '[data-provider="google"]'
-            ]
             
-            # Create popup promise before clicking
-            popup_promise = page.wait_for_event('popup', timeout=10000)
-            
-            # Try each Google button selector
-            for selector in google_selectors:
-                try:
-                    google_button = await page.wait_for_selector(selector, timeout=5000, state='visible')
-                    if google_button:
-                        logger.info(f"Found Google button with selector: {selector}")
-                        await google_button.click()
-                        break
-                except Exception:
-                    continue
-            
-            # Wait for and return the popup
-            popup = await popup_promise
-            await popup.wait_for_load_state('networkidle')
-            return popup
+            try:
+                # Add more human-like browser properties
+                await page.evaluate('''() => {
+                    // Add common browser properties
+                    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+                    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                    Object.defineProperty(navigator, 'plugins', { get: () => [
+                        { name: 'Chrome PDF Plugin' },
+                        { name: 'Chrome PDF Viewer' },
+                        { name: 'Native Client' }
+                    ]});
+                    
+                    // Add Chrome specific properties
+                    window.chrome = {
+                        app: { isInstalled: false },
+                        runtime: {},
+                        loadTimes: function(){},
+                        csi: function(){},
+                        webstore: {}
+                    };
+                    
+                    // Add WebGL
+                    const getParameter = WebGLRenderingContext.getParameter;
+                    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                        if (parameter === 37445) {
+                            return 'Intel Inc.';
+                        }
+                        if (parameter === 37446) {
+                            return 'Intel Iris OpenGL Engine';
+                        }
+                        return getParameter(parameter);
+                    };
+                }''')
+                
+                # Create new page for Google login
+                context = page.context
+                google_page = await context.new_page()
+                await google_page.goto('https://accounts.google.com')
+                
+                # Wait for button to be ready and visible
+                google_button = await page.wait_for_selector('button:has-text("Continue with Google")', state='visible', timeout=5000)
+                
+                if not google_button:
+                    raise Exception("Could not find Google login button")
+                
+                # Wait for any animations to complete
+                await asyncio.sleep(1)
+                
+                # Get button position for human-like interaction
+                box = await google_button.bounding_box()
+                if not box:
+                    raise Exception("Could not get button position")
+                    
+                # Move mouse like a human would
+                await page.mouse.move(
+                    box['x'] + box['width'] / 2,
+                    box['y'] + box['height'] / 2,
+                    steps=10
+                )
+                await asyncio.sleep(0.1)
+                
+                # Remove any intercepting elements
+                await page.evaluate('''() => {
+                    // Remove all overlays and intercepting elements
+                    document.querySelectorAll('div[class*="overlay"], div[class*="modal"], div[class*="backdrop"], div[class*="dialog"]').forEach(el => {
+                        if (el.style.zIndex > 0) {
+                            el.style.zIndex = '-1';
+                        }
+                        el.style.pointerEvents = 'none';
+                    });
+                    
+                    // Find the Google button using text content
+                    const buttons = Array.from(document.querySelectorAll('button'));
+                    const googleButton = buttons.find(btn => 
+                        btn.textContent.includes('Continue with Google') && 
+                        btn.querySelector('svg')
+                    );
+                    
+                    if (googleButton) {
+                        // Ensure the button and its container are clickable
+                        googleButton.style.pointerEvents = 'auto';
+                        googleButton.style.zIndex = '9999';
+                        let parent = googleButton.parentElement;
+                        while (parent && parent !== document.body) {
+                            parent.style.pointerEvents = 'auto';
+                            parent.style.zIndex = '9999';
+                            parent = parent.parentElement;
+                        }
+                    }
+                }''')
+                
+                # Wait for styles to apply
+                await asyncio.sleep(0.5)
+                
+                # Click with JavaScript to ensure the event triggers
+                await page.evaluate('''() => {
+                    const buttons = Array.from(document.querySelectorAll('button'));
+                    const googleButton = buttons.find(btn => 
+                        btn.textContent.includes('Continue with Google') && 
+                        btn.querySelector('svg')
+                    );
+                    if (googleButton) {
+                        const rect = googleButton.getBoundingClientRect();
+                        const clickEvent = new MouseEvent('click', {
+                            view: window,
+                            bubbles: true,
+                            cancelable: true,
+                            clientX: rect.left + rect.width / 2,
+                            clientY: rect.top + rect.height / 2
+                        });
+                        googleButton.dispatchEvent(clickEvent);
+                    }
+                }''')
+                
+                logger.info("Successfully clicked Google button")
+                
+                # Wait for Google login page to load
+                await google_page.wait_for_load_state('networkidle')
+                
+                return google_page
+                
+            except Exception as e:
+                logger.error(f"Error during Google login: {str(e)}")
+                raise Exception("Could not click Google login button")
 
         @staticmethod
         async def handle_research(page: Any, query: str) -> str:
